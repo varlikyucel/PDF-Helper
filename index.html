@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF & Image Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PDF.js and PDF-lib libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.min.js"></script>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <style>
+      /* Add custom styles if needed, Tailwind handles most */
+      .tab-button.active {
+        border-color: #3b82f6;
+        background-color: #3b82f6;
+        color: white;
+      }
+      .tab-button:not(.active):hover {
+        background-color: #e5e7eb;
+      }
+      /* Custom scrollbar for lists */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 8px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 10px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 10px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #555;
+      }
+      /* Ensure details marker is styled */
+      details > summary {
+        list-style: none;
+      }
+      details > summary::-webkit-details-marker {
+        display: none;
+      }
+      details > summary::before {
+        content: "\25B6\00a0"; /* Right-pointing triangle */
+        font-size: 0.8em;
+        transition: transform 0.2s ease-in-out;
+        display: inline-block; /* Ensure it takes space */
+        vertical-align: middle;
+      }
+      details[open] > summary::before {
+        transform: rotate(90deg);
+      }
+      /* Style color inputs */
+      input[type="color"] {
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+        width: 40px;
+        height: 28px;
+        background-color: transparent;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      input[type="color"]::-webkit-color-swatch {
+        border-radius: 3px;
+        border: none;
+      }
+      input[type="color"]::-moz-color-swatch {
+        border-radius: 3px;
+        border: none;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-100 p-4 md:p-8">
+    <div class="container mx-auto max-w-4xl bg-white shadow-lg rounded-lg p-6">
+      <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">
+        PDF & Image Editor
+      </h1>
+
+      <!-- Tab Buttons -->
+      <div class="flex border-b border-gray-300 mb-6 justify-center space-x-4">
+        <button
+          class="tab-button active py-2 px-4 border-b-2 border-transparent transition duration-150 ease-in-out text-blue-600 hover:text-blue-800 font-medium focus:outline-none"
+          onclick="openTab(event, 'NumberingTab')"
+        >
+          PDF Numbering
+        </button>
+        <button
+          class="tab-button py-2 px-4 border-b-2 border-transparent transition duration-150 ease-in-out text-gray-500 hover:text-gray-700 font-medium focus:outline-none"
+          onclick="openTab(event, 'ImageToPdfTab')"
+        >
+          Image to PDF
+        </button>
+      </div>
+
+      <!-- PDF Numbering Tab -->
+      <div id="NumberingTab" class="tabcontent space-y-6">
+        <div class="p-4 border rounded-md bg-gray-50 space-y-4">
+          <label
+            for="file-input"
+            class="block text-sm font-medium text-gray-700"
+            >Upload PDF:</label
+          >
+          <input
+            type="file"
+            id="file-input"
+            accept=".pdf"
+            class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+          />
+          <div class="flex flex-wrap gap-2 mt-2">
+            <button
+              id="process-btn"
+              disabled
+              class="w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Process PDF
+            </button>
+            <button id="top-reset-btn" class="button-secondary">
+              Reset Settings
+            </button>
+          </div>
+          <div
+            id="error-message"
+            class="text-red-600 text-sm mt-2"
+            style="display: none"
+          ></div>
+          <div
+            id="progress"
+            class="text-sm text-blue-600 mt-2"
+            style="display: none"
+          >
+            Processing PDF...
+          </div>
+        </div>
+
+        <details class="border rounded-md overflow-hidden">
+          <summary
+            class="cursor-pointer p-4 bg-gray-100 hover:bg-gray-200 font-semibold text-gray-700"
+          >
+            Numbering Customization
+          </summary>
+          <div class="p-4 space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="form-group">
+                <label
+                  for="header-format"
+                  class="block text-sm font-medium text-gray-700 mb-1"
+                  >Top Right Format:</label
+                >
+                <input
+                  type="text"
+                  id="header-format"
+                  value="OTG {pageNumber*2-1}/{totalPages*2}"
+                  class="input-field"
+                />
+                <p class="input-help">
+                  Vars: {pageNumber}, {totalPages}, {pageNumber*2},
+                  {pageNumber*2-1}, {totalPages*2}
+                </p>
+              </div>
+              <div class="form-group">
+                <label
+                  for="footer-format"
+                  class="block text-sm font-medium text-gray-700 mb-1"
+                  >Bottom Right Format:</label
+                >
+                <input
+                  type="text"
+                  id="footer-format"
+                  value="OTG {pageNumber*2}/{totalPages*2}"
+                  class="input-field"
+                />
+                <p class="input-help">
+                  Vars: {pageNumber}, {totalPages}, {pageNumber*2},
+                  {pageNumber*2-1}, {totalPages*2}
+                </p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-4">
+              <div class="form-group">
+                <label
+                  for="font-select"
+                  class="block text-sm font-medium text-gray-700 mb-1"
+                  >Font:</label
+                >
+                <select id="font-select" class="select-field">
+                  <option value="Helvetica">Helvetica</option>
+                  <option value="TimesRoman">Times Roman</option>
+                  <option value="Courier">Courier</option>
+                  <!-- Add more standard fonts if needed -->
+                </select>
+              </div>
+              <div class="form-group">
+                <label
+                  for="font-size"
+                  class="block text-sm font-medium text-gray-700 mb-1"
+                  >Font Size (pt):</label
+                >
+                <input
+                  type="number"
+                  id="font-size"
+                  value="10"
+                  min="6"
+                  max="72"
+                  class="input-field w-20"
+                />
+              </div>
+              <div class="form-group">
+                <label
+                  for="font-color"
+                  class="block text-sm font-medium text-gray-700 mb-1"
+                  >Font Color:</label
+                >
+                <input
+                  type="color"
+                  id="font-color"
+                  value="#000000"
+                  class="p-0"
+                />
+              </div>
+            </div>
+
+            <div class="border-t pt-4 space-y-4">
+              <div class="flex items-center">
+                <input
+                  id="enable-label-bg"
+                  type="checkbox"
+                  class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label
+                  for="enable-label-bg"
+                  class="ml-2 block text-sm text-gray-900"
+                  >Enable Background Label</label
+                >
+              </div>
+              <div
+                id="label-settings"
+                class="grid grid-cols-1 md:grid-cols-2 gap-4 pl-6 hidden"
+              >
+                <div class="form-group">
+                  <label
+                    for="label-padding"
+                    class="block text-sm font-medium text-gray-700 mb-1"
+                    >Padding (pt):</label
+                  >
+                  <input
+                    type="number"
+                    id="label-padding"
+                    value="2"
+                    min="0"
+                    max="20"
+                    class="input-field w-20"
+                  />
+                </div>
+                <div class="form-group">
+                  <label
+                    for="label-color"
+                    class="block text-sm font-medium text-gray-700 mb-1"
+                    >Label Color:</label
+                  >
+                  <input
+                    type="color"
+                    id="label-color"
+                    value="#FFFFFF"
+                    class="p-0"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="border rounded-md overflow-hidden">
+          <summary
+            class="cursor-pointer p-4 bg-gray-100 hover:bg-gray-200 font-semibold text-gray-700"
+          >
+            Manual Page Entries
+          </summary>
+          <div class="p-4 space-y-4">
+            <p class="text-sm text-gray-600">
+              Override automatic numbering with custom text for specific pages.
+            </p>
+            <div class="form-group">
+              <label class="block text-sm font-medium text-gray-700 mb-1"
+                >Add Entry:</label
+              >
+              <div class="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="number"
+                  id="page-number"
+                  min="1"
+                  placeholder="Page #"
+                  class="input-field flex-none w-20"
+                />
+                <input
+                  type="text"
+                  id="manual-header"
+                  placeholder="Top right text"
+                  class="input-field flex-grow"
+                />
+                <input
+                  type="text"
+                  id="manual-footer"
+                  placeholder="Bottom right text"
+                  class="input-field flex-grow"
+                />
+                <button id="add-manual-btn" class="button-primary flex-none">
+                  Add
+                </button>
+              </div>
+            </div>
+            <div
+              id="manual-entries"
+              class="max-h-60 overflow-y-auto custom-scrollbar border-t border-gray-200 pt-4 mt-4 space-y-2"
+            ></div>
+          </div>
+        </details>
+
+        <div
+          id="preview-container"
+          class="mt-6 space-y-4"
+          style="display: none"
+        >
+          <h2 class="text-xl font-semibold text-gray-800">
+            Preview of First Page
+          </h2>
+          <div
+            class="flex justify-center border rounded-md overflow-hidden bg-gray-100 p-2"
+          >
+            <canvas
+              id="pdf-preview"
+              class="max-w-full h-auto shadow-md"
+            ></canvas>
+          </div>
+          <div class="flex justify-center space-x-4">
+            <button id="download-btn" class="button-primary">
+              Download Modified PDF
+            </button>
+            <button id="reset-btn" class="button-secondary">Reset</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Image to PDF Tab -->
+      <div
+        id="ImageToPdfTab"
+        class="tabcontent space-y-6"
+        style="display: none"
+      >
+        <div class="p-4 border rounded-md bg-gray-50 space-y-4">
+          <label
+            for="image-input"
+            class="block text-sm font-medium text-gray-700"
+            >Select multiple images (JPEG/PNG):</label
+          >
+          <input
+            type="file"
+            id="image-input"
+            accept=".jpg,.jpeg,.png"
+            multiple
+            class="input-file"
+          />
+          <div
+            id="image-error"
+            class="text-red-600 text-sm mt-2"
+            style="display: none"
+          ></div>
+          <div
+            id="image-progress"
+            class="text-sm text-blue-600 mt-2"
+            style="display: none"
+          >
+            Processing images...
+          </div>
+        </div>
+
+        <details class="border rounded-md overflow-hidden" open>
+          <summary
+            class="cursor-pointer p-4 bg-gray-100 hover:bg-gray-200 font-semibold text-gray-700"
+          >
+            Layout Settings
+          </summary>
+          <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+              <label
+                for="image-scale"
+                class="block text-sm font-medium text-gray-700"
+                >Image Scale (<span id="scale-value">90</span>%)</label
+              >
+              <input
+                type="range"
+                id="image-scale"
+                min="50"
+                max="100"
+                value="90"
+                class="input-range"
+              />
+              <p class="input-help">Smaller = more white space</p>
+            </div>
+            <div class="form-group">
+              <label
+                for="vertical-spacing"
+                class="block text-sm font-medium text-gray-700"
+                >Vertical Spacing (pt)</label
+              >
+              <input
+                type="number"
+                id="vertical-spacing"
+                min="0"
+                max="100"
+                value="20"
+                class="input-field"
+              />
+              <p class="input-help">Top/bottom/between</p>
+            </div>
+            <div class="form-group">
+              <label
+                for="horizontal-margin"
+                class="block text-sm font-medium text-gray-700"
+                >Horizontal Margins (pt)</label
+              >
+              <input
+                type="number"
+                id="horizontal-margin"
+                min="0"
+                max="100"
+                value="20"
+                class="input-field"
+              />
+              <p class="input-help">Left/right edges</p>
+            </div>
+          </div>
+        </details>
+
+        <div class="border rounded-md p-4 bg-gray-50">
+          <h3 class="text-lg font-medium text-gray-800 mb-3">
+            Selected Images
+          </h3>
+          <div
+            class="image-list max-h-60 overflow-y-auto custom-scrollbar space-y-2"
+            id="image-list"
+          >
+            <p class="text-sm text-gray-500">No images selected</p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap justify-center gap-4 mt-4">
+          <button id="create-pdf-btn" disabled class="button-primary">
+            Create PDF
+          </button>
+          <button id="preview-pdf-btn" disabled class="button-secondary">
+            Preview Layout
+          </button>
+          <button id="reset-images-btn" disabled class="button-secondary">
+            Reset Images
+          </button>
+        </div>
+
+        <div
+          id="image-preview"
+          class="mt-6 border rounded-md p-4 bg-gray-50"
+          style="display: none"
+        >
+          <h3 class="text-xl font-semibold text-gray-800 mb-4 text-center">
+            Page Layout Preview
+          </h3>
+          <div id="preview-pages" class="space-y-6"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Tailwind config (optional, for applying base styles easily)
+      tailwind.config = {
+        theme: {
+          extend: {
+            // Add custom theme settings if needed
+          },
+        },
+        plugins: [
+          function ({ addComponents }) {
+            addComponents({
+              ".input-field": {
+                "@apply mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm":
+                  {},
+              },
+              ".input-help": { "@apply mt-1 text-xs text-gray-500": {} },
+              ".select-field": {
+                "@apply mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md":
+                  {},
+              },
+              ".button-primary": {
+                "@apply inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed":
+                  {},
+              },
+              ".button-secondary": {
+                "@apply inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed":
+                  {},
+              },
+              ".details-summary": {
+                "@apply cursor-pointer p-4 bg-gray-100 hover:bg-gray-200 font-semibold text-gray-700":
+                  {},
+              },
+              ".input-range": {
+                "@apply w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700":
+                  {},
+              },
+              ".input-file": {
+                "@apply block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100":
+                  {},
+              },
+            });
+          },
+        ],
+      };
+
+      // Set PDF.js worker
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.worker.min.js";
+
+      // Tab functionality
+      function openTab(evt, tabName) {
+        var i, tabcontent, tablinks;
+        tabcontent = document.getElementsByClassName("tabcontent");
+        for (i = 0; i < tabcontent.length; i++) {
+          tabcontent[i].style.display = "none";
+        }
+        tablinks = document.getElementsByClassName("tab-button");
+        for (i = 0; i < tablinks.length; i++) {
+          tablinks[i].classList.remove("active");
+          tablinks[i].classList.remove("text-blue-600", "hover:text-blue-800");
+          tablinks[i].classList.add("text-gray-500", "hover:text-gray-700");
+        }
+        document.getElementById(tabName).style.display = "block";
+        evt.currentTarget.classList.add("active");
+        evt.currentTarget.classList.remove(
+          "text-gray-500",
+          "hover:text-gray-700"
+        );
+        evt.currentTarget.classList.add("text-blue-600", "hover:text-blue-800");
+      }
+      // Initialize first tab
+      document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("NumberingTab").style.display = "block";
+        // Check libraries
+        checkLibraries();
+        // Setup label visibility toggle
+        const enableLabelCheckbox = document.getElementById("enable-label-bg");
+        const labelSettingsDiv = document.getElementById("label-settings");
+        enableLabelCheckbox.addEventListener("change", function () {
+          labelSettingsDiv.classList.toggle("hidden", !this.checked);
+        });
+
+        // Set default formats
+        headerFormat.value = "OTG {pageNumber*2-1}/{totalPages*2}";
+        footerFormat.value = "OTG {pageNumber*2}/{totalPages*2}";
+
+        // Load saved settings
+        try {
+          const savedSettings = localStorage.getItem("pageNumberSettings");
+          if (savedSettings) {
+            const settings = JSON.parse(savedSettings);
+            document.getElementById("header-format").value =
+              settings.headerTemplate || headerFormat.value;
+            document.getElementById("footer-format").value =
+              settings.footerTemplate || footerFormat.value;
+            document.getElementById("font-size").value =
+              settings.fontSize || 10;
+            document.getElementById("font-select").value =
+              settings.fontName || "Helvetica";
+            document.getElementById("font-color").value =
+              settings.fontColor || "#000000";
+            document.getElementById("enable-label-bg").checked =
+              settings.enableLabel || false;
+            document.getElementById("label-color").value =
+              settings.labelColor || "#FFFF00";
+            document.getElementById("label-padding").value =
+              settings.labelPadding || 5;
+
+            // Show/hide label settings based on loaded preference
+            labelSettingsDiv.classList.toggle("hidden", !settings.enableLabel);
+          }
+        } catch (e) {
+          console.error("Error loading saved settings:", e);
+        }
+
+        // Make reset button always available
+        resetBtn.disabled = false;
+
+        // Setup remaining event listeners
+        // ... existing code ...
+      });
+
+      // --- PDF Numbering Tab Elements & Logic ---
+      const fileInput = document.getElementById("file-input");
+      const processBtn = document.getElementById("process-btn");
+      const previewContainer = document.getElementById("preview-container");
+      const previewCanvas = document.getElementById("pdf-preview");
+      const downloadBtn = document.getElementById("download-btn");
+      const resetBtn = document.getElementById("reset-btn");
+      const topResetBtn = document.getElementById("top-reset-btn");
+      const progressElement = document.getElementById("progress");
+      const errorMessage = document.getElementById("error-message");
+      const headerFormat = document.getElementById("header-format");
+      const footerFormat = document.getElementById("footer-format");
+
+      const pageNumberInput = document.getElementById("page-number");
+      const manualHeaderInput = document.getElementById("manual-header");
+      const manualFooterInput = document.getElementById("manual-footer");
+      const addManualBtn = document.getElementById("add-manual-btn");
+      const manualEntriesContainer = document.getElementById("manual-entries");
+
+      const manualEntries = {};
+      let originalPdfBytes;
+      let modifiedPdfBytes;
+
+      // Make the top reset button do the same as the bottom reset button
+      topResetBtn.addEventListener("click", function () {
+        resetSettings();
+      });
+
+      // Add a function to handle reset logic
+      function resetSettings() {
+        fileInput.value = "";
+        processBtn.disabled = true;
+        previewContainer.style.display = "none";
+        errorMessage.style.display = "none";
+        originalPdfBytes = null;
+        modifiedPdfBytes = null;
+        // Reset numbering settings to default
+        document.getElementById("font-select").value = "Helvetica";
+        document.getElementById("font-size").value = "10";
+        document.getElementById("font-color").value = "#000000";
+        document.getElementById("enable-label-bg").checked = false;
+        document.getElementById("label-settings").classList.add("hidden");
+        document.getElementById("label-padding").value = "2";
+        document.getElementById("label-color").value = "#FFFFFF";
+        // Reset format fields and manual entries
+        Object.keys(manualEntries).forEach((key) => delete manualEntries[key]);
+        updateManualEntriesUI();
+        headerFormat.value = "OTG {pageNumber*2-1}/{totalPages*2}";
+        footerFormat.value = "OTG {pageNumber*2}/{totalPages*2}";
+      }
+
+      // Update the existing reset button to use the common function
+      resetBtn.addEventListener("click", resetSettings);
+
+      addManualBtn.addEventListener("click", function () {
+        const pageNumber = parseInt(pageNumberInput.value);
+        if (isNaN(pageNumber) || pageNumber < 1) {
+          alert("Please enter a valid page number.");
+          return;
+        }
+        const headerText = manualHeaderInput.value.trim();
+        const footerText = manualFooterInput.value.trim();
+        if (headerText === "" && footerText === "") {
+          alert("Please enter text for at least one override field.");
+          return;
+        }
+        manualEntries[pageNumber] = { header: headerText, footer: footerText };
+        updateManualEntriesUI();
+        pageNumberInput.value = ""; // Consider incrementing or keeping for faster entry?
+        manualHeaderInput.value = "";
+        manualFooterInput.value = "";
+        pageNumberInput.focus();
+      });
+
+      function updateManualEntriesUI() {
+        manualEntriesContainer.innerHTML = ""; // Clear existing
+        const pageNumbers = Object.keys(manualEntries)
+          .map(Number)
+          .sort((a, b) => a - b);
+
+        if (pageNumbers.length === 0) {
+          manualEntriesContainer.innerHTML =
+            '<p class="text-sm text-gray-500">No manual overrides added.</p>';
+          return;
+        }
+
+        pageNumbers.forEach((pageNumber) => {
+          const entry = manualEntries[pageNumber];
+          const entryDiv = document.createElement("div");
+          entryDiv.className =
+            "page-override flex flex-col sm:flex-row gap-2 items-center bg-white p-2 rounded border border-gray-200";
+
+          const pageSpan = document.createElement("span");
+          pageSpan.className =
+            "page-number flex-none w-20 font-medium text-sm text-gray-700";
+          pageSpan.textContent = `Page ${pageNumber}:`;
+
+          const headerInput = document.createElement("input");
+          headerInput.type = "text";
+          headerInput.value = entry.header;
+          headerInput.placeholder = "Top right text";
+          headerInput.className = "input-field flex-grow"; // Use Tailwind component
+          headerInput.addEventListener("change", function () {
+            manualEntries[pageNumber].header = this.value;
+          });
+
+          const footerInput = document.createElement("input");
+          footerInput.type = "text";
+          footerInput.value = entry.footer;
+          footerInput.placeholder = "Bottom right text";
+          footerInput.className = "input-field flex-grow"; // Use Tailwind component
+          footerInput.addEventListener("change", function () {
+            manualEntries[pageNumber].footer = this.value;
+          });
+
+          const removeBtn = document.createElement("button");
+          removeBtn.className =
+            "remove-btn flex-none px-2 py-1 text-sm font-medium rounded text-red-600 hover:bg-red-100 focus:outline-none";
+          removeBtn.innerHTML = "&#x2716;"; // Cross symbol
+          removeBtn.title = `Remove Page ${pageNumber} override`;
+          removeBtn.addEventListener("click", function () {
+            delete manualEntries[pageNumber];
+            updateManualEntriesUI();
+          });
+
+          entryDiv.appendChild(pageSpan);
+          entryDiv.appendChild(headerInput);
+          entryDiv.appendChild(footerInput);
+          entryDiv.appendChild(removeBtn);
+
+          manualEntriesContainer.appendChild(entryDiv);
+        });
+      }
+      updateManualEntriesUI(); // Initial call to show placeholder if empty
+
+      fileInput.addEventListener("change", function (e) {
+        processBtn.disabled = !fileInput.files.length;
+        errorMessage.style.display = "none";
+      });
+
+      processBtn.addEventListener("click", async function () {
+        if (!fileInput.files.length) return;
+        const file = fileInput.files[0];
+        progressElement.style.display = "block";
+        errorMessage.style.display = "none";
+        processBtn.disabled = true;
+
+        try {
+          console.log("Starting PDF processing");
+          const arrayBuffer = await file.arrayBuffer();
+          originalPdfBytes = new Uint8Array(arrayBuffer);
+
+          // Save settings to localStorage
+          const settings = saveSettings();
+          console.log("Using settings:", settings);
+
+          // Use the saved settings for processing
+          modifiedPdfBytes = await processWithPageNumbers(
+            originalPdfBytes,
+            settings,
+            manualEntries
+          );
+          console.log("PDF successfully processed");
+
+          const pdfDoc = await pdfjsLib.getDocument({ data: modifiedPdfBytes })
+            .promise;
+          const page = await pdfDoc.getPage(1);
+          const viewport = page.getViewport({ scale: 1.5 }); // Slightly larger preview
+          previewCanvas.height = viewport.height;
+          previewCanvas.width = viewport.width;
+          const renderContext = {
+            canvasContext: previewCanvas.getContext("2d"),
+            viewport: viewport,
+          };
+          await page.render(renderContext).promise;
+
+          previewContainer.style.display = "block";
+        } catch (error) {
+          console.error("Error processing PDF:", error);
+          errorMessage.textContent =
+            "Error processing PDF: " + (error.message || error);
+          errorMessage.style.display = "block";
+        } finally {
+          progressElement.style.display = "none";
+          processBtn.disabled = !fileInput.files.length; // Re-enable if file still selected
+        }
+      });
+
+      function formatText(template, pageNumber, totalPages) {
+        // Ensure template is a string
+        if (typeof template !== "string") return "";
+
+        // Handle predefined variables
+        let result = template
+          .replace("{pageNumber}", pageNumber)
+          .replace("{totalPages}", totalPages)
+          .replace("{pageNumber*2-1}", pageNumber * 2 - 1)
+          .replace("{pageNumber*2}", pageNumber * 2)
+          .replace("{totalPages*2}", totalPages * 2);
+
+        // Handle custom variable expressions
+        const regex = /{([^}]+)}/g;
+        result = result.replace(regex, function (match, expression) {
+          try {
+            // Only allow safe operations with pageNumber and totalPages
+            if (
+              expression.includes("pageNumber") ||
+              expression.includes("totalPages")
+            ) {
+              // Create a safe evaluation context
+              const safeEval = new Function(
+                "pageNumber",
+                "totalPages",
+                `return ${expression.replace(/[^0-9+\-*/().\s\w]/g, "")}`
+              );
+              return safeEval(pageNumber, totalPages);
+            }
+            return match; // Keep original if not a valid expression
+          } catch (e) {
+            return match; // Keep original if evaluation fails
+          }
+        });
+
+        return result;
+      }
+
+      async function processWithPageNumbers(
+        pdfBytes,
+        settings,
+        manualOverrides = {}
+      ) {
+        const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+        const pages = pdfDoc.getPages();
+        const totalPages = pages.length;
+
+        // Basic color conversion - direct use of hex values since our custom function might be causing issues
+        const textColor = hexToRgb(settings.fontColor || "#000000");
+        const bgColor = hexToRgb(settings.labelColor || "#FFFFFF");
+
+        // Use standard fonts directly - simplify font selection
+        let fontName;
+        switch (settings.fontName) {
+          case "TimesRoman":
+            fontName = PDFLib.StandardFonts.TimesRoman;
+            break;
+          case "Courier":
+            fontName = PDFLib.StandardFonts.Courier;
+            break;
+          case "Helvetica":
+          default:
+            fontName = PDFLib.StandardFonts.Helvetica;
+        }
+
+        // Embed the font - simple approach
+        const pdfFont = await pdfDoc.embedFont(fontName);
+
+        // Process each page
+        pages.forEach((page, index) => {
+          const pageNumber = index + 1;
+          const pageWidth = page.getWidth();
+          const pageHeight = page.getHeight();
+
+          // Get text for header and footer
+          let headerText = "";
+          let footerText = "";
+
+          // Check for manual overrides first
+          if (pageNumber in manualOverrides) {
+            headerText = manualOverrides[pageNumber].header || "";
+            footerText = manualOverrides[pageNumber].footer || "";
+          } else {
+            // Use templates for automatic numbering
+            if (settings.headerTemplate) {
+              headerText = formatText(
+                settings.headerTemplate,
+                pageNumber,
+                totalPages
+              );
+            }
+            if (settings.footerTemplate) {
+              footerText = formatText(
+                settings.footerTemplate,
+                pageNumber,
+                totalPages
+              );
+            }
+          }
+
+          // Set fixed margins and sizes
+          const margin = 20;
+          const fontSize = settings.fontSize || 10;
+
+          // Draw header (top right)
+          if (headerText) {
+            // Calculate text width for positioning
+            const textWidth = pdfFont.widthOfTextAtSize(headerText, fontSize);
+            const x = pageWidth - margin - textWidth;
+            const y = pageHeight - margin;
+
+            // Draw background if enabled
+            if (settings.enableLabel) {
+              const padding = settings.labelPadding || 2;
+              page.drawRectangle({
+                x: x - padding,
+                y: y - fontSize - padding,
+                width: textWidth + padding * 2,
+                height: fontSize + padding * 2,
+                color: PDFLib.rgb(bgColor[0], bgColor[1], bgColor[2]),
+              });
+            }
+
+            // Draw text
+            page.drawText(headerText, {
+              x: x,
+              y: y - fontSize, // Adjust for baseline
+              size: fontSize,
+              font: pdfFont,
+              color: PDFLib.rgb(textColor[0], textColor[1], textColor[2]),
+            });
+          }
+
+          // Draw footer (bottom right)
+          if (footerText) {
+            // Calculate text width for positioning
+            const textWidth = pdfFont.widthOfTextAtSize(footerText, fontSize);
+            const x = pageWidth - margin - textWidth;
+            const y = margin + fontSize; // Position from bottom
+
+            // Draw background if enabled
+            if (settings.enableLabel) {
+              const padding = settings.labelPadding || 2;
+              page.drawRectangle({
+                x: x - padding,
+                y: y - fontSize - padding,
+                width: textWidth + padding * 2,
+                height: fontSize + padding * 2,
+                color: PDFLib.rgb(bgColor[0], bgColor[1], bgColor[2]),
+              });
+            }
+
+            // Draw text
+            page.drawText(footerText, {
+              x: x,
+              y: y - fontSize, // Adjust for baseline
+              size: fontSize,
+              font: pdfFont,
+              color: PDFLib.rgb(textColor[0], textColor[1], textColor[2]),
+            });
+          }
+        });
+
+        // Save the modified PDF
+        return await pdfDoc.save();
+      }
+
+      downloadBtn.addEventListener("click", function () {
+        if (!modifiedPdfBytes) return;
+        const blob = new Blob([modifiedPdfBytes], { type: "application/pdf" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "OTG_" + (fileInput.files[0]?.name || "numbered.pdf");
+        link.click();
+        URL.revokeObjectURL(link.href);
+      });
+
+      // --- Image to PDF Tab Elements & Logic ---
+      const imageInput = document.getElementById("image-input");
+      const imageList = document.getElementById("image-list");
+      const createPdfBtn = document.getElementById("create-pdf-btn");
+      const previewPdfBtn = document.getElementById("preview-pdf-btn");
+      const resetImagesBtn = document.getElementById("reset-images-btn");
+      const imagePreview = document.getElementById("image-preview");
+      const previewPages = document.getElementById("preview-pages");
+      const imageProgress = document.getElementById("image-progress");
+      const imageError = document.getElementById("image-error");
+      const imageScale = document.getElementById("image-scale");
+      const scaleValue = document.getElementById("scale-value");
+      const verticalSpacing = document.getElementById("vertical-spacing");
+      const horizontalMargin = document.getElementById("horizontal-margin");
+
+      let imageFiles = [];
+
+      imageScale.addEventListener("input", function () {
+        scaleValue.textContent = `${imageScale.value}`; // Update percentage display
+      });
+
+      imageInput.addEventListener("change", function (e) {
+        if (!this.files.length) {
+          imageFiles = [];
+          updateImageListUI();
+          createPdfBtn.disabled = true;
+          previewPdfBtn.disabled = true;
+          resetImagesBtn.disabled = true;
+          return;
+        }
+        imageFiles = Array.from(this.files);
+        updateImageListUI(); // This now filters and updates UI
+        createPdfBtn.disabled = imageFiles.length === 0;
+        previewPdfBtn.disabled = imageFiles.length === 0;
+        resetImagesBtn.disabled = false;
+      });
+
+      function updateImageListUI() {
+        imageList.innerHTML = "";
+        imageError.style.display = "none"; // Clear previous errors
+        let currentFiles = [...imageFiles]; // Work with a copy
+
+        // Filter for valid types first
+        const validTypes = ["image/jpeg", "image/jpg", "image/png"];
+        const invalidFiles = currentFiles.filter(
+          (file) => !validTypes.includes(file.type)
+        );
+        if (invalidFiles.length > 0) {
+          imageError.textContent = `Unsupported file types: ${invalidFiles
+            .map((f) => f.name)
+            .join(", ")}. Only JPEG/PNG allowed.`;
+          imageError.style.display = "block";
+        }
+        imageFiles = currentFiles.filter((file) =>
+          validTypes.includes(file.type)
+        ); // Update main array
+
+        if (imageFiles.length === 0) {
+          imageList.innerHTML =
+            '<p class="text-sm text-gray-500">No valid images selected (JPEG/PNG only).</p>';
+          createPdfBtn.disabled = true;
+          previewPdfBtn.disabled = true;
+          return;
+        }
+
+        imageFiles.forEach((file, index) => {
+          const imageItem = document.createElement("div");
+          imageItem.className =
+            "image-item flex items-center p-2 bg-white rounded border border-gray-200 gap-3";
+
+          const img = document.createElement("img");
+          img.className = "flex-none w-16 h-10 object-cover rounded";
+          const objectUrl = URL.createObjectURL(file);
+          img.src = objectUrl;
+          img.onload = () => URL.revokeObjectURL(objectUrl); // Clean up URL
+          img.onerror = () => {
+            console.warn(`Failed to load thumbnail for ${file.name}`);
+            img.alt = "Invalid Image";
+            // Maybe add styling to show it failed
+          };
+
+          const imageName = document.createElement("div");
+          imageName.className =
+            "image-name flex-grow text-sm text-gray-700 truncate";
+          imageName.textContent = `${index + 1}. ${file.name}`;
+          imageName.title = file.name;
+
+          const removeBtn = document.createElement("button");
+          removeBtn.className =
+            "remove-btn flex-none px-2 py-1 text-sm font-medium rounded text-red-600 hover:bg-red-100 focus:outline-none";
+          removeBtn.innerHTML = "&#x2716;"; // Cross symbol
+          removeBtn.title = `Remove ${file.name}`;
+          removeBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            imageFiles.splice(index, 1);
+            updateImageListUI();
+            createPdfBtn.disabled = imageFiles.length === 0;
+            previewPdfBtn.disabled = imageFiles.length === 0;
+            resetImagesBtn.disabled = imageFiles.length === 0;
+          });
+
+          imageItem.appendChild(img);
+          imageItem.appendChild(imageName);
+          imageItem.appendChild(removeBtn);
+
+          imageList.appendChild(imageItem);
+        });
+      }
+      updateImageListUI(); // Initial call
+
+      previewPdfBtn.addEventListener("click", async function () {
+        if (!imageFiles.length) return;
+        imagePreview.style.display = "block";
+        previewPages.innerHTML = "";
+        imageProgress.textContent = "Generating Preview...";
+        imageProgress.style.display = "block";
+        imageError.style.display = "none";
+        previewPdfBtn.disabled = true;
+
+        try {
+          const scale = parseInt(imageScale.value) / 100;
+          const pagePairs = [];
+          for (let i = 0; i < imageFiles.length; i += 2) {
+            pagePairs.push([imageFiles[i], imageFiles[i + 1]].filter(Boolean));
+          }
+
+          for (let i = 0; i < pagePairs.length; i++) {
+            const pageDiv = document.createElement("div");
+            pageDiv.className =
+              "preview-page border border-gray-300 rounded bg-white p-2 shadow-sm";
+
+            const pageTitle = document.createElement("h4");
+            pageTitle.textContent = `Preview Page ${i + 1}`;
+            pageTitle.className =
+              "text-center font-semibold text-sm text-gray-600 mb-2";
+
+            const imageContainer = document.createElement("div");
+            imageContainer.className =
+              "image-container h-[420px] flex flex-col justify-around items-center gap-2"; // Approx A4
+
+            pagePairs[i].forEach((file) => {
+              const imgContainer = document.createElement("div");
+              imgContainer.className =
+                "w-full h-[48%] flex justify-center items-center overflow-hidden bg-gray-100 border rounded";
+
+              const img = document.createElement("img");
+              const objectUrl = URL.createObjectURL(file);
+              img.src = objectUrl;
+              img.onload = () => URL.revokeObjectURL(objectUrl); // Clean up
+              img.style.maxWidth = `${scale * 100}%`;
+              img.style.maxHeight = `${scale * 100}%`;
+              img.style.objectFit = "contain";
+              img.alt = file.name;
+              imgContainer.appendChild(img);
+              imageContainer.appendChild(imgContainer);
+            });
+
+            pageDiv.appendChild(pageTitle);
+            pageDiv.appendChild(imageContainer);
+            previewPages.appendChild(pageDiv);
+          }
+        } catch (error) {
+          console.error("Error creating preview:", error);
+          imageError.textContent = "Error creating preview: " + error.message;
+          imageError.style.display = "block";
+        } finally {
+          imageProgress.style.display = "none";
+          previewPdfBtn.disabled = imageFiles.length === 0;
+        }
+      });
+
+      async function loadAndProcessImage(file) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          const objectUrl = URL.createObjectURL(file);
+
+          img.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            try {
+              let width = img.width;
+              let height = img.height;
+              let needsRotation = width < height;
+              const canvas = document.createElement("canvas");
+              const ctx = canvas.getContext("2d");
+              if (needsRotation) {
+                canvas.width = height;
+                canvas.height = width;
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+                ctx.rotate(Math.PI / 2);
+                ctx.drawImage(img, -width / 2, -height / 2, width, height);
+              } else {
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+              }
+              canvas.toBlob((blob) => {
+                if (!blob)
+                  return reject(
+                    new Error(`Canvas toBlob failed for ${file.name}`)
+                  );
+                resolve({
+                  blob: blob,
+                  width: canvas.width,
+                  height: canvas.height,
+                  type: "image/png", // Always output PNG
+                });
+              }, "image/png");
+            } catch (err) {
+              reject(
+                new Error(
+                  `Canvas processing error for ${file.name}: ${err.message}`
+                )
+              );
+            }
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error(`Failed to load image: ${file.name}`));
+          };
+          img.src = objectUrl;
+        });
+      }
+
+      async function createPdfFromImages(filesToProcess) {
+        const a4Width = 595.28;
+        const a4Height = 841.89;
+        const scale = parseInt(imageScale.value) / 100;
+        const vSpacing = parseInt(verticalSpacing.value);
+        const hMargin = parseInt(horizontalMargin.value);
+        const pdfDoc = await PDFLib.PDFDocument.create();
+
+        for (let i = 0; i < filesToProcess.length; i += 2) {
+          try {
+            const page = pdfDoc.addPage([a4Width, a4Height]);
+            const maxWidth = a4Width - hMargin * 2;
+            const halfPageHeight = a4Height / 2;
+            const maxHeight = halfPageHeight - vSpacing * 2; // Usable height per image
+
+            // Process first image
+            const image1Data = await loadAndProcessImage(filesToProcess[i]);
+            const image1Bytes = await image1Data.blob.arrayBuffer();
+            const image1 = await pdfDoc.embedPng(image1Bytes);
+            const scaleFactor1 = Math.min(
+              (maxWidth / image1.width) * scale,
+              (maxHeight / image1.height) * scale
+            );
+            const scaledWidth1 = image1.width * scaleFactor1;
+            const scaledHeight1 = image1.height * scaleFactor1;
+            const x1 = (a4Width - scaledWidth1) / 2;
+            const y1 = a4Height - halfPageHeight / 2 - scaledHeight1 / 2; // Center in top half
+            page.drawImage(image1, {
+              x: x1,
+              y: y1,
+              width: scaledWidth1,
+              height: scaledHeight1,
+            });
+
+            // Process second image
+            if (i + 1 < filesToProcess.length) {
+              const image2Data = await loadAndProcessImage(
+                filesToProcess[i + 1]
+              );
+              const image2Bytes = await image2Data.blob.arrayBuffer();
+              const image2 = await pdfDoc.embedPng(image2Bytes);
+              const scaleFactor2 = Math.min(
+                (maxWidth / image2.width) * scale,
+                (maxHeight / image2.height) * scale
+              );
+              const scaledWidth2 = image2.width * scaleFactor2;
+              const scaledHeight2 = image2.height * scaleFactor2;
+              const x2 = (a4Width - scaledWidth2) / 2;
+              const y2 = halfPageHeight / 2 - scaledHeight2 / 2; // Center in bottom half
+              page.drawImage(image2, {
+                x: x2,
+                y: y2,
+                width: scaledWidth2,
+                height: scaledHeight2,
+              });
+            }
+          } catch (error) {
+            console.error(
+              `Skipping page creation due to error processing image(s) near index ${i}:`,
+              error
+            );
+            imageError.textContent = `Error processing image ${
+              filesToProcess[i]?.name || "unknown"
+            }: ${error.message}. Skipping.`;
+            imageError.style.display = "block";
+            // Continue to next page
+          }
+        }
+        return await pdfDoc.save();
+      }
+
+      createPdfBtn.addEventListener("click", async function () {
+        if (!imageFiles.length) return;
+        imageProgress.textContent = "Creating PDF...";
+        imageProgress.style.display = "block";
+        imageError.style.display = "none";
+        createPdfBtn.disabled = true;
+        previewPdfBtn.disabled = true;
+        resetImagesBtn.disabled = true;
+
+        try {
+          const pdfBytes = await createPdfFromImages(imageFiles);
+          const blob = new Blob([pdfBytes], { type: "application/pdf" });
+          const link = document.createElement("a");
+          link.href = URL.createObjectURL(blob);
+          link.download = "images_to_pdf.pdf";
+          link.click();
+          URL.revokeObjectURL(link.href);
+        } catch (error) {
+          console.error("Error creating PDF:", error);
+          imageError.textContent = "Error creating PDF: " + error.message;
+          imageError.style.display = "block";
+        } finally {
+          imageProgress.style.display = "none";
+          createPdfBtn.disabled = imageFiles.length === 0;
+          previewPdfBtn.disabled = imageFiles.length === 0;
+          resetImagesBtn.disabled = false;
+        }
+      });
+
+      resetImagesBtn.addEventListener("click", function () {
+        imageInput.value = "";
+        imageFiles = [];
+        updateImageListUI();
+        imagePreview.style.display = "none";
+        createPdfBtn.disabled = true;
+        previewPdfBtn.disabled = true;
+        resetImagesBtn.disabled = true;
+        imageError.style.display = "none";
+      });
+
+      // --- Common Logic ---
+      function hexToRgb(hex) {
+        let r = 0,
+          g = 0,
+          b = 0;
+        // 3 digits
+        if (hex.length == 4) {
+          r = parseInt(hex[1] + hex[1], 16);
+          g = parseInt(hex[2] + hex[2], 16);
+          b = parseInt(hex[3] + hex[3], 16);
+          // 6 digits
+        } else if (hex.length == 7) {
+          r = parseInt(hex[1] + hex[2], 16);
+          g = parseInt(hex[3] + hex[4], 16);
+          b = parseInt(hex[5] + hex[6], 16);
+        }
+        return [r / 255, g / 255, b / 255]; // pdf-lib expects values between 0 and 1
+      }
+
+      function checkLibraries() {
+        const generalError = document.getElementById("error-message"); // Use PDF tab error for critical library issues
+        if (typeof pdfjsLib === "undefined") {
+          generalError.textContent =
+            "Critical Error: PDF.js library failed to load.";
+          generalError.style.display = "block";
+          console.error("PDF.js failed to load");
+        }
+        if (typeof PDFLib === "undefined") {
+          generalError.textContent =
+            "Critical Error: PDF-lib library failed to load.";
+          generalError.style.display = "block";
+          console.error("PDF-Lib failed to load");
+        }
+      }
+
+      function saveSettings() {
+        // Read directly from DOM elements to ensure we get the latest values
+        const settings = {
+          headerTemplate: document.getElementById("header-format").value.trim(),
+          footerTemplate: document.getElementById("footer-format").value.trim(),
+          fontSize: parseInt(document.getElementById("font-size").value) || 10,
+          fontName: document.getElementById("font-select").value || "Helvetica",
+          fontColor: document.getElementById("font-color").value || "#000000",
+          enableLabel:
+            document.getElementById("enable-label-bg").checked || false,
+          labelColor: document.getElementById("label-color").value || "#FFFFFF",
+          labelPadding:
+            parseInt(document.getElementById("label-padding").value) || 2,
+        };
+
+        console.log("Saving settings:", settings);
+        localStorage.setItem("pageNumberSettings", JSON.stringify(settings));
+        return settings;
+      }
+    </script>
+  </body>
+</html>
